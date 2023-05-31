@@ -15,12 +15,18 @@ model Post {
   title    String
   body     String
   comments Comment[]
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  createAt DateTime  @default(now())
+  updateAt DateTime  @default(now()) @updatedAt
 }
 
 model User {
   id       String    @id @default(uuid())
   name     String
+  pswd     String
   comments Comment[]
+  posts    Post[]
   likes    Like[]
 }
 

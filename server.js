@@ -18,10 +18,10 @@ app.register(cors, {
 // the userId always set to Kyle
 app.addHook("onRequest", (req, res, done) => {
   if (req.cookies.userId !== CURRENT_USER_ID) {
-    req.cookies.userId = CURRENT_USER_ID
-    res.clearCookie("userId")
-    res.setCookie("userId", CURRENT_USER_ID)
-    console.log("res")
+    // req.cookies.userId = CURRENT_USER_ID
+    // res.clearCookie("userId")
+    // res.setCookie("userId", CURRENT_USER_ID)
+    // console.log("res")
   }
   done()
 })
@@ -44,15 +44,67 @@ const COMMENT_SELECT_FIELDS = {
   },
 }
 
+app.post("/logout", async (req, res) => {
+  if (req.cookies.userName) {
+    res.clearCookie("userName")
+    res.clearCookie("userId")
+  }
+  return "logout"
+})
+
+app.post("/login", async (req, res) => {
+  // console.log(req.body.username)
+  // console.log(req.body.password)
+  // res.setCookie("userId", CURRENT_USER_ID)
+  const user = await prisma.user.findFirst({
+    where: { name: req.body.username },
+    select: { id: true, name: true, pswd: true },
+  })
+
+  if (user === null) {
+    return res.send(app.httpErrors.badRequest("The username is not exist"))
+  }
+
+  if (user.pswd !== req.body.password) {
+    return res.send(app.httpErrors.badRequest("The passwrod is not correct"))
+  }
+
+  res.clearCookie("userId")
+  res.setCookie("userName", user.name)
+  res.setCookie("userId", user.id)
+
+  return {
+    id: user.id,
+    name: user.name,
+  }
+})
+
 app.get("/posts", async (req, res) => {
-  return await commitToDb(
+  const posts = await commitToDb(
     prisma.post.findMany({
       select: {
         id: true,
         title: true,
+        createAt: true,
+        body: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     })
   )
+  return posts.map((post) => {
+    return {
+      ...post,
+      body:
+        post.body.length > 100
+          ? post.body.substring(0, 100) + "..."
+          : post.body,
+    }
+  })
 })
 
 app.get("/posts/:id", async (req, res) => {
@@ -63,6 +115,7 @@ app.get("/posts/:id", async (req, res) => {
         select: {
           body: true,
           title: true,
+          createAt: true,
           comments: {
             orderBy: {
               createAt: "desc",
@@ -70,6 +123,11 @@ app.get("/posts/:id", async (req, res) => {
             select: {
               ...COMMENT_SELECT_FIELDS,
               _count: { select: { likes: true } },
+            },
+          },
+          user: {
+            select: {
+              name: true,
             },
           },
         },
@@ -102,6 +160,10 @@ app.post("/posts/:id/comments", async (req, res) => {
     return res.send(app.httpErrors.badRequest("Message is requried"))
   }
 
+  if (req.cookies.userId === null || req.cookies.userId === undefined) {
+    return res.send(app.httpErrors.badRequest("Please log in frist"))
+  }
+
   return await commitToDb(
     prisma.comment
       .create({
@@ -124,6 +186,9 @@ app.post("/posts/:id/comments", async (req, res) => {
 })
 
 app.put("/posts/:postId/comments/:commentId", async (req, res) => {
+  if (req.cookies.userId === undefined || req.cookies.userId === null) {
+    return res.send(app.httpErrors.badRequest("Please log in first."))
+  }
   if (req.body.message === "" || req.body.message === null) {
     return res.send(app.httpErrors.badRequest("Message is requried"))
   }
@@ -150,6 +215,10 @@ app.put("/posts/:postId/comments/:commentId", async (req, res) => {
 })
 
 app.delete("/posts/:postId/comments/:commentId", async (req, res) => {
+  if (req.cookies.userId === undefined || req.cookies.userId === null) {
+    return res.send(app.httpErrors.badRequest("Please log in first."))
+  }
+
   const { userId } = await prisma.comment.findUnique({
     where: { id: req.params.commentId },
     select: { userId: true },
@@ -171,6 +240,9 @@ app.delete("/posts/:postId/comments/:commentId", async (req, res) => {
 })
 
 app.post("/posts/:postId/comments/:commentId/toggleLike", async (req, res) => {
+  if (req.cookies.userId === undefined || req.cookies.userId === null) {
+    return res.send(app.httpErrors.badRequest("Please log in first."))
+  }
   const data = {
     commentId: req.params.commentId,
     userId: req.cookies.userId,
