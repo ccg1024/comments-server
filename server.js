@@ -267,6 +267,33 @@ app.post("/posts/:postId/comments/:commentId/toggleLike", async (req, res) => {
   }
 })
 
+app.post("/post/create", async (req, res) => {
+  if (req.cookies.userId === null || req.cookies.userId === undefined) {
+    return res.send(app.httpErrors.badRequest("Please log in first"))
+  }
+
+  if (req.body.title.trim() === "" || req.body.title === undefined) {
+    return res.send(app.httpErrors.badRequest("The post title cannot be empty"))
+  }
+
+  if (req.body.body.trim() === "" || req.body.body === undefined) {
+    return res.send(app.httpErrors.badRequest("The post body cannot be empty"))
+  }
+
+  return await commitToDb(
+    prisma.post.create({
+      data: {
+        title: req.body.title,
+        body: req.body.body,
+        userId: req.cookies.userId,
+      },
+      select: {
+        id: true,
+      },
+    })
+  )
+})
+
 async function commitToDb(promise) {
   const [error, data] = await app.to(promise)
   if (error) return app.httpErrors.internalServerError(error.message)
